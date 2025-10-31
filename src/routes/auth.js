@@ -71,4 +71,32 @@ router.post('/logout', async (req,res,next)=>{
   }catch(e){ next(e); }
 });
 
+
+// Resend verification code without revealing whether email exists
+router.post('/resend', async (req, res, next) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: 'Email required' });
+    // Find pending user (has code)
+    const pending = await PendingUser.findOne({ email });
+    if (pending) {
+      // regenerate code and extend expiry
+      const code = genCode();
+      pending.code = code;
+      pending.expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+      await pending.save();
+      // send asynchronously
+      sendMail({
+        to: email,
+        subject: 'Your confirmation code',
+        text: `Your confirmation code is ${pending.code}`,
+        html: `<p>Your confirmation code is <b>${pending.code}</b></p>`,
+      });
+    } else {
+      // If not pending: avoid user enumeration; respond success anyway
+    }
+    return res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

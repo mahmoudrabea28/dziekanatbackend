@@ -1,45 +1,46 @@
+// Fallback: Resend -> SMTP -> MOCK
 const nodemailer = require('nodemailer');
 
-// Use a pooled transporter with sensible timeouts to avoid long blocking awaits on free hosts
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT || 587),
-  secure: false,
-  auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-  pool: true,
-  maxConnections: 2,
-  maxMessages: 100,
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
-});
+async function sendViaSMTP({ to, subject, html, text }) {
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: false,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
+  });
+  await transporter.sendMail({
+    from: process.env.MAIL_FROM || 'Dziekanat <no-reply@dz.local>',
+    to, subject, html, text,
+  });
+}
 
-/**
- * Fire-and-forget email sending to prevent request timeouts on providers like Render free tier.
- * Callers can `await sendMail(...)` safely—this function resolves immediately after queuing.
- */
-async function sendMail({ to, subject, html, text }) {
-  if (!process.env.SMTP_USER) {
-    console.log('SMTP not configured; logging email:', { to, subject, text });
-    return;
+async function sendViaResend({ to, subject, html, text }) {
+  const { Resend } = require('resend');
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  await resend.emails.send({
+    from: process.env.MAIL_FROM || 'Dziekanat <onboarding@resend.dev>',
+    to, subject, html, text,
+  });
+}
+
+async function sendMail(payload) {
+  if (process.env.EMAIL_MOCK === '1') {
+    console.log('MOCK EMAIL >>>', payload);
+    return { mocked: true };
   }
-  // Queue send without awaiting, and swallow errors to avoid breaking HTTP response
-  transporter
-    .sendMail({
-      from: process.env.MAIL_FROM || 'no-reply@akademion.local',
-      to,
-      subject,
-      html,
-      text,
-    })
-    .then(info => {
-      console.log('Email queued:', info && info.messageId ? info.messageId : 'ok');
-    })
-    .catch(err => {
-      console.error('Email error:', err && err.message ? err.message : err);
-    });
-  // Resolve immediately
-  return;
+  try {
+    if (process.env.RESEND_API_KEY) return await sendViaResend(payload);
+    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return await sendViaSMTP(payload);
+    console.log('MOCK EMAIL (no provider) >>>', payload);
+    return { mocked: true };
+  } catch (e) {
+    console.error('sendMail failed:', e.message || e);
+    console.log('MOCK EMAIL (fallback) >>>', payload);
+    return { mocked: true, error: e.message || String(e) };
+  }
 }
 
 module.exports = { sendMail };

@@ -38,22 +38,6 @@ router.post('/register', async (req,res,next)=>{
   }catch(e){ next(e); }
 });
 
-    // ابعت الإيميل في الخلفية (لا await)
-    sendMail({
-      to: email,
-      subject: 'Akademion - Verify your email',
-      text: `Your verification code is ${code}. It expires in 15 minutes.`
-      // تقدر تضيف html لو حابب
-    }).catch(e => {
-      // مجرد لوج — مايعطّرش التسجيل
-      console.error('Email send error:', e && e.message ? e.message : e);
-    });
-
-    // رجّع رد سريع — كده الـ UI مش هيشوف Timeout
-    return res.status(201).json({ message: 'verification_sent' });
-
-  }catch(e){ next(e); }
-});
 
 // VERIFY (زي ما هو)
 router.post('/verify-email', async (req,res,next)=>{

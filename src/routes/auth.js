@@ -11,23 +11,32 @@ function genCode(){ return ''+Math.floor(100000+Math.random()*900000); }
 router.post('/register', async (req,res,next)=>{
   try{
     const { email, password, firstName, lastName, role } = req.body;
-    if(!email || !password || !firstName || !lastName){
-      return res.status(400).json({error:'Missing fields'});
-    }
+    if(!email || !password || !firstName || !lastName) return res.status(400).json({error:'Missing fields'});
 
-    const allowed = ['professor','student'];
+    const allowed = ['professor','student']; 
     const r = allowed.includes(role) ? role : 'professor';
 
-    const exists = await User.findOne({ email });
+    const exists = await User.findOne({email});
     if(exists) return res.status(409).json({error:'Email already registered'});
 
     const code = genCode();
-
-    // خزّن طلب التسجيل المؤقت
     await PendingUser.deleteOne({ email });
-    await PendingUser.createFromPayload({
-      email, password, firstName, lastName, role: r, code
-    });
+    await PendingUser.createFromPayload({ email, password, firstName, lastName, role: r, code });
+
+    // fire-and-forget
+    const p = sendMail({
+      to: email,
+      subject: 'Akademion - Verify your email',
+      text: `Your verification code is ${code}. It expires in 15 minutes.`
+    }).catch(e => console.error('Email error:', e?.message || e));
+
+    // فى وضع الموك رجّع الكود للمطور
+    if (process.env.EMAIL_MOCK === '1') {
+      return res.status(201).json({ message:'verification_sent', devCode: code });
+    }
+    return res.status(201).json({ message:'verification_sent' });
+  }catch(e){ next(e); }
+});
 
     // ابعت الإيميل في الخلفية (لا await)
     sendMail({

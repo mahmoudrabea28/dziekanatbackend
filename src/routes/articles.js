@@ -2,9 +2,7 @@ const router = require('express').Router();
 const { auth, hasRole } = require('../middleware/auth');
 const { uploadPdf, deleteFileSafe, saveBufferToLocal } = require('../utils/storage');
 const Article = require('../models/Article');
-const Review = require('../models/Review');
 const User = require('../models/User');
-const AssignmentSeen = require('../models/AssignmentSeen');
 const { isCloudOn, uploadStream, deleteByPublicId } = require('../utils/cloud');
 
 function parseKeywords(s){ if(Array.isArray(s)) return s; if(!s) return []; return String(s).split(',').map(x=>x.trim()).filter(Boolean); }
@@ -69,45 +67,9 @@ router.get('/mine', auth, hasRole('professor'), async (req,res,next)=>{
   catch(e){ next(e); }
 });
 
-router.get('/assigned', auth, hasRole('student'), async (req,res,next)=>{
-  try{
-    const f = buildFilter(req.query);
-    f.mentorEmail = req.user.email;
-    const done = String(req.query.done||'false').toLowerCase() === 'true';
-    const reviewed = await Review.find({ reviewer: req.user._id }).distinct('article');
-    f._id = done ? { $in: reviewed } : { $nin: reviewed };
-    const arts = await Article.find(f).sort('-createdAt');
-    const ids = arts.map(a=>a._id);
-    const seens = await AssignmentSeen.find({ student: req.user._id, article: { $in: ids } }).lean();
-    const seenSet = new Set(seens.filter(s=>s.seen).map(s=>String(s.article)));
-    const data = arts.map(a=>({ ...a.toObject(), seen: seenSet.has(String(a._id)) }));
-    res.json(data);
-  }catch(e){ next(e); }
-});
 
-router.post('/assigned/:id/seen', auth, hasRole('student'), async (req,res,next)=>{
-  try{
-    const articleId = req.params.id;
-    let rec = await AssignmentSeen.findOne({ student:req.user._id, article: articleId });
-    if(!rec) rec = await AssignmentSeen.create({ student:req.user._id, article: articleId, seen:true });
-    else { rec.seen = true; await rec.save(); }
-    res.json({ok:true});
-  }catch(e){ next(e); }
-});
 
-router.get('/assigned/unseen-count', auth, hasRole('student'), async (req,res,next)=>{
-  try{
-    const f = { mentorEmail: req.user.email };
-    const reviewed = await Review.find({ reviewer: req.user._id }).distinct('article');
-    f._id = { $nin: reviewed };
-    const arts = await Article.find(f).select('_id');
-    const ids = arts.map(a=>a._id);
-    const seens = await AssignmentSeen.find({ student:req.user._id, article: { $in: ids }, seen:true }).select('article');
-    const seenIds = new Set(seens.map(s=>String(s.article)));
-    const unseenCount = ids.filter(id=>!seenIds.has(String(id))).length;
-    res.json({ count: unseenCount });
-  }catch(e){ next(e); }
-});
+
 
 router.get('/:id', async (req,res,next)=>{
   try{ const a = await Article.findById(req.params.id); if(!a) return res.status(404).json({error:'Not found'}); res.json(a); }

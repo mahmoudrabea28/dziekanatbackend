@@ -1,0 +1,36 @@
+# OS / Editors
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env & secrets
+.env
+.env.*.local
+
+# Build / Caches
+dist/
+build/
+.cache/
+.vite/
+.next/
+.vercel/
+coverage/
+tmp/
+.tmp/
+
+# Local uploads (dev only)
+uploads/
+public/uploads/
+src/uploads/
+
+# Logs
+logs/
+*.log
